@@ -1,0 +1,211 @@
+import customtkinter as ctk # Importa a biblioteca CustomTkinter para criar a interface gráfica
+from tkinter import StringVar # Importa StringVar do Tkinter para gerenciar o texto do visor
+import tkinter.constants as constants # Importa constantes do Tkinter, como W, E, N, S para posicionamento
+
+# --- Configuração inicial do CustomTkinter ---
+ctk.set_appearance_mode("dark") # Define o tema de aparência para "dark" (escuro)
+ctk.set_default_color_theme("blue") # Define o tema de cor padrão para "blue"
+
+# Função de cálculo base (pode ser um método ou função separada)
+def calcular(n1, n2, op): # Define a função 'calcular' que recebe dois números e um operador
+    if op == '+': return n1 + n2 # Se o operador for '+', retorna a soma de n1 e n2
+    elif op == '-': return n1 - n2 # Se o operador for '-', retorna a subtração de n1 e n2
+    elif op == '*': return n1 * n2 # Se o operador for '*', retorna a multiplicação de n1 e n2
+    elif op == '/': # Se o operador for '/'
+        if n2 != 0: return n1 / n2 # Se n2 não for zero, retorna a divisão de n1 por n2
+        else: return None # Indica erro de divisão por zero retornando None
+    return None # Retorna None se o operador não for reconhecido
+
+class Calculator: # Define a classe principal da calculadora
+    def __init__(self, master): # Método construtor da classe, chamado ao criar uma nova instância
+        self.master = master # Armazena a janela principal (root) como um atributo da instância
+        master.title("Calculadora") # Define o título da janela
+        master.geometry("250x400") # Define o tamanho inicial da janela (largura x altura)
+        master.resizable(False, False) # Impede que o usuário redimensione a janela
+
+        # --- Variáveis de estado da calculadora (atributos da instância) ---
+        # StringVar para o texto que aparece no visor. 'value="0"' define o texto inicial.
+        self.current_input_display = StringVar(value="0")
+        # String que armazena o número que o usuário está digitando ou o resultado atual (valor numérico puro)
+        self.actual_number_input = "0"
+        self.first_operand = None # Armazena o primeiro número de uma operação (ex: o '5' em '5 +')
+        self.operator = None # Armazena o operador selecionado (ex: '+', '-', '*')
+        # Flag booleana: True se um operador ou '=' foi pressionado e o próximo número deve limpar o visor
+        self.is_new_number_expected = False
+
+        # --- Visor ---
+        self.display = ctk.CTkLabel(master, # Cria um rótulo (label) CustomTkinter para o visor
+                                    textvariable=self.current_input_display, # Associa o texto do rótulo à StringVar
+                                    font=("Arial", 30, 'bold'), # Define a fonte e o tamanho do texto
+                                    anchor='e', # Alinha o texto à direita dentro do rótulo
+                                    corner_radius=15, # Define o raio dos cantos para arredondamento
+                                    height=70, # Define a altura do rótulo
+                                    fg_color=("#333333", "#222222"), # Define a cor de fundo do rótulo (para tema claro/escuro)
+                                    text_color="white") # Define a cor do texto do rótulo
+        # Posiciona o visor na grade: linha 0, coluna 0, ocupando 4 colunas, com padding e expandindo
+        self.display.grid(row=0, column=0, columnspan=4, padx=5, pady=5, sticky=constants.W + constants.E)
+
+        self.create_buttons() # Chama o método para criar e posicionar todos os botões
+        master.bind("<Key>", self.handle_key_press) # Vincula o evento de pressionar qualquer tecla à função handle_key_press
+
+    def create_buttons(self): # Método para definir e criar os botões da calculadora
+        # Lista de tuplas: (texto do botão, linha, coluna, span de colunas, cor, comando)
+        buttons_info = [
+            ('C', 1, 0, 1, "#CC3300"), ('/', 1, 3, 1, "#FF9500"),
+            ('7', 2, 0, 1, "#555555"), ('8', 2, 1, 1, "#555555"), ('9', 2, 2, 1, "#555555"), ('*', 2, 3, 1, "#FF9500"),
+            ('4', 3, 0, 1, "#555555"), ('5', 3, 1, 1, "#555555"), ('6', 3, 2, 1, "#555555"), ('-', 3, 3, 1, "#FF9500"),
+            ('1', 4, 0, 1, "#555555"), ('2', 4, 1, 1, "#555555"), ('3', 4, 2, 1, "#555555"), ('+', 4, 3, 1, "#FF9500"),
+            ('0', 5, 0, 2, "#555555"), ('.', 5, 2, 1, "#555555"), ('=', 5, 3, 1, "#00A0B0")
+        ]
+
+        # Configura as colunas da grade para que se expandam igualmente
+        for i in range(4): self.master.grid_columnconfigure(i, weight=1, uniform="button_col")
+        # Configura as linhas da grade (a partir da linha 1, pois a 0 é o visor) para que se expandam igualmente
+        for i in range(1, 6): self.master.grid_rowconfigure(i, weight=1, uniform="button_row")
+
+        # Informações dos botões para criá-los e posicioná-los
+        for (text, row, col, columnspan, color) in buttons_info:
+            command = None # Inicializa a variável de comando
+            if text == 'C': command = self.clear_all # Se o texto é 'C', o comando é limpar tudo
+            elif text == '=': command = self.calculate_result # Se o texto é '=', o comando é calcular o resultado
+            # Se o texto é um operador, o comando é chamar process_operator com o operador específico
+            elif text in ['+', '-', '*', '/']: command = lambda op=text: self.process_operator(op)
+            elif text == '.': command = self.append_decimal # Se o texto é '.', o comando é adicionar o decimal
+            else: command = lambda num=text: self.append_number(num) # Para números, o comando é adicionar o número
+
+            button = ctk.CTkButton(self.master, text=text, command=command, font=("Arial", 20, "bold"),
+                                   corner_radius=10, fg_color=color, hover_color=self.get_hover_color(color), text_color="white")
+            # Posiciona o botão na grade com padding e expandindo para preencher a célula
+            button.grid(row=row, column=col, columnspan=columnspan, padx=5, pady=5, sticky="nsew")
+
+    def get_hover_color(self, base_color): # Método para obter a cor de hover (quando o mouse passa por cima)
+        if base_color == "#FF9500": return "#CC7A00" # Laranja escuro
+        if base_color == "#00A0B0": return "#00808A" # Azul escuro
+        if base_color == "#CC3300": return "#AA2B00" # Vermelho escuro
+        if base_color == "#555555": return "#777777" # Cinza mais claro
+        return base_color # Retorna a cor base se não houver uma cor de hover específica
+
+    def append_number(self, num_char): # Método para adicionar um dígito numérico ao número atual
+        if self.is_new_number_expected: # Se um novo número é esperado (após operador ou resultado)
+            self.actual_number_input = num_char # O novo dígito se torna o número atual
+            self.is_new_number_expected = False # Reseta a flag
+            # Atualiza o visor: se houver operador, mostra só o número; senão, mostra o número (limpando histórico)
+            self.current_input_display.set(self.actual_number_input)
+        else: # Se o usuário continua digitando o mesmo número
+            if self.actual_number_input == "0" and num_char != '0': # Se é '0' e digita outro número (não '0'), substitui
+                self.actual_number_input = num_char
+            elif self.actual_number_input == "-0" and num_char != '0': # Se é '-0' e digita outro número (não '0'), substitui
+                self.actual_number_input = "-" + num_char
+            elif self.actual_number_input == "0" and num_char == '0': # Se é '0' e digita '0', não faz nada (evita "00")
+                pass
+            else: # Anexa o dígito ao número atual
+                self.actual_number_input += num_char
+            self.current_input_display.set(self.actual_number_input) # Atualiza o visor
+
+    def append_decimal(self): # Método para adicionar o ponto decimal
+        if self.is_new_number_expected: # Se um novo número é esperado
+            self.actual_number_input = "0." # Inicia com "0."
+            self.is_new_number_expected = False # Reseta a flag
+            self.current_input_display.set("0.") # Atualiza o visor
+        elif '.' not in self.actual_number_input: # Se o número atual não contém um ponto
+            self.actual_number_input += "." # Adiciona o ponto
+            self.current_input_display.set(self.actual_number_input) # Atualiza o visor
+
+    def process_operator(self, op): # Método para processar a seleção de um operador
+        try:
+            current_value = float(self.actual_number_input) # Converte o número atual para float
+            if self.first_operand is None: # Se é a primeira operação (nenhum primeiro operando salvo)
+                self.first_operand = current_value # Salva o valor atual como o primeiro operando
+            elif not self.is_new_number_expected: # Se um segundo número foi digitado (não está esperando nova entrada)
+                # Calcula o resultado da operação anterior para encadeamento (ex: 5 + 3 -)
+                result = calcular(self.first_operand, current_value, self.operator)
+                if result is None: # Se houve erro na função calcular (divisão por zero)
+                    self.current_input_display.set("Erro: Divisão por zero!") # Exibe erro
+                    self.clear_state(); return # Limpa o estado e sai
+                self.first_operand = result # O resultado se torna o novo primeiro operando
+                self.format_display_number(self.first_operand) # Atualiza actual_number_input com o resultado formatado
+            
+            self.operator = op # Salva o novo operador
+            # Formata o primeiro operando para exibição (remove .0 se inteiro)
+            formatted_first = str(int(self.first_operand)) if self.first_operand.is_integer() else str(self.first_operand)
+            # Atualiza o visor para mostrar o primeiro número e o operador (ex: "10 +")
+            self.current_input_display.set(f"{formatted_first} {self.operator}")
+            self.is_new_number_expected = True # Sinaliza que a próxima digitação de número deve limpar o visor
+        except ValueError: # Captura erro se a conversão para float falhar
+            self.current_input_display.set("Erro") # Exibe erro no visor
+            self.clear_state() # Limpa o estado da calculadora
+        except Exception as e: # Captura qualquer outra exceção inesperada
+            self.current_input_display.set(f"Erro: {e}") # Exibe o erro específico para depuração
+            self.clear_state() # Limpa o estado da calculadora
+
+    def calculate_result(self): # Método para calcular o resultado final
+        if self.first_operand is None or self.operator is None: return # Se não há operação pendente, não faz nada
+        try:
+            second_operand = float(self.actual_number_input) # Converte o número atual para o segundo operando
+            result = calcular(self.first_operand, second_operand, self.operator) # Realiza o cálculo
+            if result is None and self.operator == '/': # Se houve erro na função calcular (divisão por zero)
+                self.current_input_display.set("Erro: Divisão por zero!") # Exibe erro
+                self.clear_state(); return # Limpa o estado e sai
+            self.format_display_number(result) # Formata e atualiza actual_number_input e o visor com o resultado
+            self.first_operand = None # Reseta o primeiro operando
+            self.operator = None # Reseta o operador
+            self.is_new_number_expected = True # Sinaliza que a próxima digitação de número deve limpar o visor
+        except ValueError: # Captura erro se a conversão para float falhar
+            self.current_input_display.set("Erro") # Exibe erro
+            self.clear_state() # Limpa o estado
+        except Exception as e: # Captura qualquer outra exceção inesperada
+            self.current_input_display.set(f"Erro: {e}") # Exibe o erro específico
+            self.clear_state() # Limpa o estado
+
+    def clear_all(self): # Método para limpar tudo na calculadora (botão 'C')
+        self.actual_number_input = "0" # Reseta o número atual para "0"
+        self.current_input_display.set("0") # Atualiza o visor para "0"
+        self.clear_state() # Reseta o estado interno da calculadora
+
+    def clear_state(self): # Método auxiliar para resetar as variáveis de estado
+        self.first_operand = None # Reseta o primeiro operando
+        self.operator = None # Reseta o operador
+        self.is_new_number_expected = False # Reseta a flag de nova entrada esperada
+
+    def format_display_number(self, number): # Método auxiliar para formatar números para exibição
+        if isinstance(number, float) and number.is_integer(): # Se o número é float e é um inteiro (ex: 5.0)
+            self.actual_number_input = str(int(number)) # Converte para int e depois para string (ex: "5")
+            self.current_input_display.set(str(int(number))) # Atualiza o visor
+        else: # Caso contrário (número decimal)
+            self.actual_number_input = str(number) # Converte para string como está (ex: "1.5")
+            self.current_input_display.set(str(number)) # Atualiza o visor
+
+    def handle_key_press(self, event): # Método para lidar com eventos de teclado
+        key = event.char # Caractere da tecla pressionada (ex: '5', '+')
+        keysym = event.keysym # Símbolo da tecla pressionada (para teclas especiais como 'Return', 'BackSpace')
+        
+        if key.isdigit(): self.append_number(key) # Se a tecla é um dígito, adiciona o número
+        elif key == '.': self.append_decimal() # Se a tecla é '.', adiciona o decimal
+        elif key in ['+', '*', '/']: self.process_operator(key) # Se a tecla é '+', '*', '/', processa o operador
+        elif key == '-': # Lógica especial para a tecla '-' (subtração ou sinal negativo)
+            # Diferenciação entre operador de subtração e sinal negativo
+            # Se esperando novo número, ou visor é '0'/'vazio', ou o número atual é só '-',
+            # então o '-' é o sinal negativo
+            if self.is_new_number_expected or self.actual_number_input == "0" or self.actual_number_input == "":
+                if self.actual_number_input == "-": pass # Se já é '-', não faz nada (evita "--")
+                else:
+                    self.actual_number_input = "-" # Define o número atual como '-'
+                    self.current_input_display.set("-") # Atualiza o visor para '-'
+                    self.is_new_number_expected = False # Não espera mais um novo número, está digitando um negativo
+            else: self.process_operator(key) # Caso contrário (já tem número), trata '-' como operador de subtração
+        elif keysym == 'Return': self.calculate_result() # Se a tecla é Enter, calcula o resultado
+        elif keysym == 'BackSpace': # Se a tecla é Backspace
+            if self.current_input_display.get().startswith("Erro"): self.clear_all() # Se o visor mostra erro, limpa tudo
+            elif self.actual_number_input != "0": # Se o número atual não é "0"
+                if len(self.actual_number_input) > 1: # Se tem mais de um caractere
+                    self.actual_number_input = self.actual_number_input[:-1] # Remove o último caractere
+                    self.current_input_display.set(self.actual_number_input) # Atualiza o visor
+                else: # Se só tem um caractere (ou é '-')
+                    self.actual_number_input = "0" # Define o número atual como "0"
+                    self.current_input_display.set("0") # Atualiza o visor para "0"
+        elif key.lower() == 'c': self.clear_all() # Se a tecla é 'c' (minúscula ou maiúscula), limpa tudo
+
+if __name__ == "__main__": # Bloco que garante que o código só roda quando o script é executado diretamente
+    root = ctk.CTk() # Cria a janela principal do CustomTkinter
+    app = Calculator(root) # Cria uma instância da classe Calculator, passando a janela principal
+    root.mainloop() # Inicia o loop principal de eventos do Tkinter, mantendo a janela aberta e responsiva
